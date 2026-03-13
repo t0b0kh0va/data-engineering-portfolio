@@ -24,6 +24,6 @@ A Python script to collect messages from Telegram channels and groups automatica
   {
     "chat": "t.me/channel/message_id",
     "date": "2026-01-01T09:00:00+00:00",
-    "text": "Hello world!",
+    "text": "Hello world!"
   }
 ]
