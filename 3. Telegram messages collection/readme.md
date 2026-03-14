@@ -27,3 +27,9 @@ A Python script to collect messages from Telegram channels and groups automatica
     "text": "Hello world!"
   }
 ]
+<<<<<<< HEAD
+=======
+
+## Requirements
+
+>>>>>>> 2b9b02f (make it a bit usable)
