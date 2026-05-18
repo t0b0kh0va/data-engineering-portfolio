@@ -1,13 +1,13 @@
 @echo off
-set CHATS=https://t.me/DataInsight,https://t.me/blueteamalerts,https://t.me/hack_less
-set OUTPUT=../YOUT_PATH/OUTPUT_FILE.json
+set CHATS=https://t.me/DataInsight,https://t.me/blueteamalerts
+set OUTPUT=../news/news
 
 echo Collecting from: %CHATS%
 echo Saving to: %OUTPUT%
 
 cd compose
 
-python HR.py --config config.ini --chats %CHATS% --output %OUTPUT%  --timestamps ../YOUT_PATH/OUTPUT_TIMESTAMPS.json
+python HR.py --config config.ini --chats %CHATS% --output %OUTPUT%  --timestamps ../news/news_timestamps.json --format csv
 echo.
 echo Done! Saved to %OUTPUT%
 pause

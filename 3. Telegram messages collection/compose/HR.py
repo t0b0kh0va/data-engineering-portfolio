@@ -3,6 +3,7 @@ import asyncio
 import json
 import os
 import argparse
+import csv
 from datetime import datetime, timedelta
 from pathlib import Path
 from telethon import TelegramClient
@@ -11,11 +12,12 @@ import configparser
 
 class TelegramMessageCollector:
     def __init__(self, config_file='config.ini', chats=None, output_file=None, 
-                 last_days=None, timestamps_file=None):
+                 last_days=None, timestamps_file=None, output_format='json'):
         """
         Initialize with optional command line arguments
         """
         self.config_file = config_file
+        self.output_format = output_format  # 'json' or 'csv'
         self.config = self._load_config()  # This method needs to exist!
         
         # Override with command line arguments
@@ -52,7 +54,7 @@ class TelegramMessageCollector:
                 'chat_list': '@chat1,@chat2,@chat3'  # Comma-separated list
             }
             config['SETTINGS'] = {
-                'output_file': 'telegram_messages.json',
+                'output_file': 'telegram_messages',
                 'message_limit': '100'
             }
             
@@ -173,7 +175,8 @@ class TelegramMessageCollector:
                 # Process messages (reverse to get chronological order for saving)
                 for message in reversed(messages):
                     msg_data = {
-                        'chat': chat_name +'/'+ str(message.id),
+                        'chat': chat_name,
+                        'message_id': message.id,
                         'date': message.date.isoformat() if message.date else None,
                         'text': message.text or ''
                     }
@@ -199,39 +202,57 @@ class TelegramMessageCollector:
             print("\n❌ No new messages collected")
         
         return all_messages
-    def _save_messages(self, messages):
-        """Save messages to file with UTF-8 encoding"""
-        output_file = self.config['SETTINGS']['output_file']
+    
+    def _save_messages_csv(self, messages):
+        """Save messages to CSV file with UTF-8 encoding"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_file = self.config['SETTINGS']['output_file'] + "_" + timestamp + ".csv"
+        print(f"Saving to CSV: {output_file}")
         
         output_dir = os.path.dirname(output_file)
         if output_dir and not os.path.exists(output_dir):
             os.makedirs(output_dir)
-            
-        # Load existing messages if file exists
-        existing_messages = []
-        if os.path.exists(output_file):
-            try:
-                with open(output_file, 'r', encoding='utf-8') as f:
-                    existing_messages = json.load(f)
-            except (json.JSONDecodeError, UnicodeDecodeError) as e:
-                print(f"Warning: Could not read existing file: {e}")
-                # Backup the corrupted file
-                if os.path.exists(output_file):
-                    backup_name = output_file + '.backup'
-                    os.rename(output_file, backup_name)
-                    print(f"Created backup of corrupted file: {backup_name}")
         
-        # Append new messages
-        all_messages = existing_messages + messages
+        try:
+            with open(output_file, 'w', encoding='utf-8-sig', newline='') as f:
+                writer = csv.writer(f)
+                # Write header
+                writer.writerow(['chat', 'message_id', 'date', 'text'])
+                # Write data
+                for msg in messages:
+                    writer.writerow([
+                        msg['chat'],
+                        msg['message_id'],
+                        msg['date'],
+                        msg['text'].replace('\n', '\\n').replace('\r', '\\r')  # Escape newlines for CSV
+                    ])
+            print(f"✅ Saved {len(messages)} messages to {output_file}")
+        except Exception as e:
+            print(f"Error saving CSV file: {e}")
+    
+    def _save_messages_json(self, messages):
+        """Save messages to JSON file with UTF-8 encoding"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_file = self.config['SETTINGS']['output_file'] + "_" + timestamp + ".json"
+        print(f"Saving to JSON: {output_file}")
         
-        # Save to file with UTF-8 encoding
+        output_dir = os.path.dirname(output_file)
+        if output_dir and not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
         try:
             with open(output_file, 'w', encoding='utf-8') as f:
-                json.dump(all_messages, f, ensure_ascii=False, indent=2)
-            print(f"\nSaved {len(messages)} new messages to {output_file}")
-            print(f"Total messages in file: {len(all_messages)}")
+                json.dump(messages, f, ensure_ascii=False, indent=2)
+            print(f"✅ Saved {len(messages)} messages to {output_file}")
         except Exception as e:
-            print(f"Error saving file: {e}")
+            print(f"Error saving JSON file: {e}")
+    
+    def _save_messages(self, messages):
+        """Save messages to file in the selected format"""
+        if self.output_format == 'csv':
+            self._save_messages_csv(messages)
+        else:
+            self._save_messages_json(messages)
     
     async def get_chat_entity(self, chat_identifier):
         """
@@ -273,7 +294,6 @@ class TelegramMessageCollector:
         
         try:
             messages = await self.collect_messages()
-            print(f"\nCollection complete! Found {len(messages)} new messages.")
             
         except Exception as e:
             print(f"Error during collection: {e}")
@@ -310,7 +330,7 @@ def main():
     parser.add_argument('--chats', '-c', 
                         help='Comma-separated list of chats (e.g., @channel1,@channel2)')
     parser.add_argument('--output', '-o', 
-                        help='Output file name')
+                        help='Output file name (without extension)')
     parser.add_argument('--last', '-l', type=int,
                         help='Collect messages from last N days (for first run)')
     parser.add_argument('--timestamps', '-t', default='chat_timestamps.json',
@@ -323,6 +343,8 @@ def main():
                         help='Run in continuous mode')
     parser.add_argument('--interval', type=int, default=5,
                         help='Interval in minutes for continuous mode')
+    parser.add_argument('--format', '-f', choices=['json', 'csv'], default='json',
+                        help='Output format: json or csv (default: json)')
     
     args = parser.parse_args()
     
@@ -337,7 +359,8 @@ def main():
         chats=chats,
         output_file=args.output,
         last_days=args.last,
-        timestamps_file=args.timestamps
+        timestamps_file=args.timestamps,
+        output_format=args.format
     )
     
     # Override limit if provided
